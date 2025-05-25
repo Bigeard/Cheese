@@ -1,4 +1,5 @@
 import subprocess
+import threading 
 import signal
 import time
 import os
@@ -38,7 +39,7 @@ SHUTTERSPEED = "1/100" # Minimal movement (standing still, blinking) with flash 
 ISO = "400" # Choose 100-800 depending on the environment (higher for a dark environment)
 APERTURE = "4" # f/X - Single person, dark environment = f/2.8, 1–2 people, front-facing = f/4 or f/5.6, Group photo (3+ people) = f/8
 EXPOSURE_COMPENSATION = "0.0" # If you want even less/more light: -1.0 to +1.0
-KEEP_RAW = False # Keep raw image in the SD card of the camera
+KEEP_RAW = True # Keep raw image in the SD card of the camera
 IMAGESIZE = "4928x3264"
 COLORSPACE = "AdobeRGB"
 ISOAUTO = "False"
@@ -84,10 +85,11 @@ def resize_to_fit_screen(img, max_width, max_height):
 def configure_camera(isPhoto):
     args = [
         "gphoto2",
+        "--set-config", "capturetarget=1",
         "--set-config", "/main/actions/viewfinder=" + ("1" if not isPhoto else "0"),
         "--set-config", "/main/imgsettings/whitebalance=" + WHITEBALANCE,
         "--set-config", "/main/capturesettings/flashmode=" + FLASHMODE,
-        "--set-config", "/main/capturesettings/shutterspeed=" + SHUTTERSPEED,
+        "--set-config", "/main/capturesettings/shutterspeed2=" + SHUTTERSPEED, # You have also `shutterspeed`
         "--set-config", "/main/imgsettings/iso=" + ISO,
         "--set-config", "/main/capturesettings/f-number=" + APERTURE,
         "--set-config", "/main/capturesettings/exposurecompensation=" + EXPOSURE_COMPENSATION,
@@ -96,7 +98,7 @@ def configure_camera(isPhoto):
         "--set-config", "/main/imgsettings/imagesize=" + IMAGESIZE,
         "--set-config", "/main/imgsettings/colorspace=" + COLORSPACE,
         "--set-config", "/main/imgsettings/isoauto=" + ISOAUTO,
-        "--set-config", "/main/capturesettings/microphone=0",
+        "--set-config", "/main/capturesettings/microphone=0"
     ]
 
     if(isPhoto): 
@@ -119,8 +121,8 @@ def capture_photo(filename, frame=None, retries=3):
     configure_camera(True)
 
     print(f"📸- Capturing high-resolution photo...")
-    args = ["gphoto2", "--capture-image-and-download", f"--filename={filename}"] # , "--wait-event-and-download=shutterclosed,timeout=3s"
-    if(KEEP_RAW): args += "--keep-raw"
+    args = ["gphoto2", "--capture-image-and-download", f"--filename={filename}"] # "--wait-event-and-download=shutterclosed,timeout=3s"
+    if(KEEP_RAW): args.append("--keep-raw")
 
     for attempt in range(1, retries + 1):
         result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -130,7 +132,7 @@ def capture_photo(filename, frame=None, retries=3):
             return True
         else:
             print(f"⚠️- Attempt {attempt} failed: {result.stderr.decode().strip()}")
-            time.sleep(2)
+            time.sleep(1)
     print("❌- Failed to capture photo.")
     return False
 
@@ -155,7 +157,6 @@ def start_stream():
 
     time.sleep(2)  # Allow the stream to warm up
     return stream_proc
-
 
 def stop_stream(proc):
     if(IS_WEBCAM): return
@@ -199,6 +200,7 @@ def show_video(ret, frame):
         resized_frame = resize_to_fit_screen(frame, SCREEN_WIDTH, SCREEN_HEIGHT)  # Set your screen size
         cv2.imshow('Camera', resized_frame)
 
+
 # === Main listener ===
 def run_cheese_listener():
     # Load Audio Output (Mic)
@@ -222,7 +224,6 @@ def run_cheese_listener():
         q.put(bytes(indata))
 
     # Start stream on the Virtual Camera
-    configure_camera(False)
     stream_proc = start_stream()
 
     # Start Video Capture
@@ -264,18 +265,27 @@ def run_cheese_listener():
                     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                     filename = os.path.join(PHOTO_DIR, f"cheese_{timestamp}.jpg")
                     show_text("- READY -")
-                    cv2.waitKey(500)
+                    cv2.waitKey(800)
                     show_text("- DON'T MOVE -")
-                    cv2.waitKey(500)
+                    cv2.waitKey(400)
+
+                    capture_thread = threading.Thread(target=capture_photo, args=(filename, frame))
+                    capture_thread.start()
+
+                    cv2.waitKey(400)
                     show_text("- ! CHEESE ! -")
-                    cv2.waitKey(10)
-                    capture_photo(filename, frame)
+                    cv2.waitKey(1)
+                    cv2.waitKey(2200)
+                    show_text("Wait...")
+                    cv2.waitKey(1)
+
+                    capture_thread.join()
 
                     img = cv2.imread(filename)
                     if img is not None:
                         resized_img = resize_to_fit_screen(img, SCREEN_WIDTH, SCREEN_HEIGHT)  # Set your screen size
                         cv2.imshow("Camera", resized_img)
-                    cv2.waitKey(3000)
+                        cv2.waitKey(2200)
 
                     stream_proc = start_stream()
                     # time.sleep(5)  # Give camera and ffmpeg time to initialize
