@@ -1,0 +1,13 @@
+# Cheese.py / Photo Booth
+opencv-python
+opencv-python-headless
+vosk
+sounddevice
+numpy
+Pillow
+
+# Server.py
+flask
+flask_socketio
+flask_compress
+watchdog
