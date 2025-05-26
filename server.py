@@ -44,7 +44,7 @@ def generate_thumbnail(filename):
         try:
             with Image.open(source_path) as img:
                 img.thumbnail(THUMB_SIZE)
-                img.save(thumb_path)
+                img.save(thumb_path, quality=85, optimize=True)
                 print(f"Thumbnail created: {thumb_path}")
         except Exception as e:
             print(f"Error generating thumbnail for {filename}: {e}")
@@ -191,7 +191,10 @@ def api_images():
 def serve_image(filename):
     if not allowed_file(filename):
         abort(404)
-    return send_from_directory(IMAGE_FOLDER, filename)
+    response = send_from_directory(IMAGE_FOLDER, filename)
+    response.headers["Content-Encoding"] = "identity"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 @app.route('/thumbnails/<filename>')
 def serve_thumbnail(filename):
@@ -238,7 +241,7 @@ def image_page(filename):
             <img src="{{ url_for('serve_image', filename=filename) }}" alt="{{ filename }}">
             <div class="buttons">
                 <a href="{{ url_for('index') }}" class="button">Back to Gallery</a>
-                <a href="{{ url_for('serve_image', filename=filename) }}" download class="button">Download</a>
+                <a href="{{ url_for('serve_image', filename=filename) }}" download target="_blank" class="button">Download</a>
             </div>
         </div>
     </body>

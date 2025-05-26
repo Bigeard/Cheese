@@ -19,7 +19,7 @@ PHOTO_DIR = "photos"
 BLOCKSIZE = 4000
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-BACKGROUND_COLOR = (255, 255, 255) # Azur: (230, 216, 173) # White: (255, 255, 255)
+BACKGROUND_COLOR = (230, 216, 173) # Azur: (230, 216, 173) # White: (255, 255, 255)
 
 # Audio - Vosk
 AUDIO_INPUT = "0" # `manual` or entre the index `0` or `5` or else 
@@ -39,7 +39,7 @@ SHUTTERSPEED = "1/100" # Minimal movement (standing still, blinking) with flash 
 ISO = "400" # Choose 100-800 depending on the environment (higher for a dark environment)
 APERTURE = "4" # f/X - Single person, dark environment = f/2.8, 1–2 people, front-facing = f/4 or f/5.6, Group photo (3+ people) = f/8
 EXPOSURE_COMPENSATION = "0.0" # If you want even less/more light: -1.0 to +1.0
-KEEP_RAW = True # Keep raw image in the SD card of the camera
+KEEP_RAW = False # Keep raw image in the SD card of the camera
 IMAGESIZE = "4928x3264"
 COLORSPACE = "AdobeRGB"
 ISOAUTO = "False"
@@ -74,18 +74,12 @@ def usb_reset():
     except Exception as e:
         print(f"⚠️- Failed to reset USB device: {e}")
 
-def resize_to_fit_screen(img, max_width, max_height):
-    h, w = img.shape[:2]
-    scale = min(max_width / w, max_height / h)
-    new_size = (int(w * scale), int(h * scale))
-    return cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
-
 
 # === Configure camera for photo ===
 def configure_camera(isPhoto):
     args = [
         "gphoto2",
-        "--set-config", "capturetarget=1",
+        "--set-config", "capturetarget=" + ("1" if KEEP_RAW else "0"),
         "--set-config", "/main/actions/viewfinder=" + ("1" if not isPhoto else "0"),
         "--set-config", "/main/imgsettings/whitebalance=" + WHITEBALANCE,
         "--set-config", "/main/capturesettings/flashmode=" + FLASHMODE,
@@ -195,9 +189,29 @@ def show_text(text):
     # Display the frame
     cv2.imshow('Camera', text_frame_cv)
 
+def resize_to_fit_screen_with_border(img, screen_width, screen_height):
+    h, w = img.shape[:2]
+    scale = min(screen_width / w, screen_height / h)
+    new_w, new_h = int(w * scale), int(h * scale)
+    resized_img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # Compute padding sizes
+    top = (screen_height - new_h) // 2
+    bottom = screen_height - new_h - top
+    left = (screen_width - new_w) // 2
+    right = screen_width - new_w - left
+
+    # Add border
+    return cv2.copyMakeBorder(
+        resized_img,
+        top, bottom, left, right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=BACKGROUND_COLOR  # BGR color
+    )
+
 def show_video(ret, frame):
     if ret:
-        resized_frame = resize_to_fit_screen(frame, SCREEN_WIDTH, SCREEN_HEIGHT)  # Set your screen size
+        resized_frame = resize_to_fit_screen_with_border(frame, SCREEN_WIDTH, SCREEN_HEIGHT)  # Set your screen size
         cv2.imshow('Camera', resized_frame)
 
 
@@ -251,7 +265,6 @@ def run_cheese_listener():
         
         while True:
             data = q.get()
-
             ret, frame = cap.read()
             show_video(ret, frame)
 
@@ -275,20 +288,48 @@ def run_cheese_listener():
                     cv2.waitKey(400)
                     show_text("- ! CHEESE ! -")
                     cv2.waitKey(1)
-                    cv2.waitKey(2200)
-                    show_text("Wait...")
-                    cv2.waitKey(1)
 
+                    if(not IS_WEBCAM and KEEP_RAW):
+                        cv2.waitKey(2200)
+                        show_text("Wait.  ")
+                        cv2.waitKey(400)
+                        show_text("Wait . ")
+                        cv2.waitKey(400)
+                        show_text("Wait  .")
+                        cv2.waitKey(400)
+                        show_text("Wait.  ")
+                        cv2.waitKey(400)
+                        show_text("Wait . ")
+                        cv2.waitKey(400)
+                        show_text("Wait  .")
+                        cv2.waitKey(400)
+                        show_text("Wait.  ")
+                        cv2.waitKey(400)
+                        show_text("Wait . ")
+                        cv2.waitKey(400)
+                        show_text("Wait  .")
+                        cv2.waitKey(400)
+                        show_text("Wait.  ")
+                        cv2.waitKey(400)
+                        show_text("Wait . ")
+                        cv2.waitKey(400)
+                        show_text("Wait  .")
+                        cv2.waitKey(400)
+                        show_text("Wait.  ")
+                        cv2.waitKey(400)
+                        show_text("Wait . ")
+                        cv2.waitKey(400)
+                        show_text("Wait  .")
+                        cv2.waitKey(400)
+                    show_text("...")
+                    cv2.waitKey(1)
                     capture_thread.join()
 
                     img = cv2.imread(filename)
-                    if img is not None:
-                        resized_img = resize_to_fit_screen(img, SCREEN_WIDTH, SCREEN_HEIGHT)  # Set your screen size
-                        cv2.imshow("Camera", resized_img)
-                        cv2.waitKey(2200)
+                    show_video(img is not None, img)
+                    cv2.waitKey(2200)
 
                     stream_proc = start_stream()
-                    # time.sleep(5)  # Give camera and ffmpeg time to initialize
 
                     # Try reopening the video stream
                     for i in range(10):
