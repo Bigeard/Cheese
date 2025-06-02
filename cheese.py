@@ -16,15 +16,17 @@ from PIL import Image, ImageDraw, ImageFont
 
 # === Config ===
 PHOTO_DIR = "photos"
-BLOCKSIZE = 4000
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-BACKGROUND_COLOR = (230, 216, 173) # Azur: (230, 216, 173) # White: (255, 255, 255)
+BACKGROUND_COLOR = (255, 255, 255) # Azur: (230, 216, 173) # White: (255, 255, 255)
 
 # Audio - Vosk
-AUDIO_INPUT = "0" # `manual` or entre the index `0` or `5` or else 
+AUDIO_INPUT = "2" # `manual` or entre the index `0` or `5` or else 
+BLOCKSIZE = 4096 # 4096, 8000
 MODEL_PATH = "vosk-model-small-en-us-0.15"
-TRIGGERS = {"cheese", "cheers", "choose", "she", "she's", "geez", "news", "he's", "gee is", "gee", "key", "teams", "these"}
+# TRIGGERS = {"cheese", "cheers", "choose", "she", "she's", "geez", "news", "he's", "gee is", "gee", "key", "teams", "these"}
+# TRIGGERS = {"cheese", "she's"}
+TRIGGERS = {"cheese", "choose", "she's", "geez", "gee is", "gee", "banana"} # banana give 3s
 
 # Cam
 IS_WEBCAM = False
@@ -170,7 +172,11 @@ def show_text(text):
     text_frame_pil = Image.fromarray(cv2.cvtColor(text_frame_cv, cv2.COLOR_BGR2RGB))
 
     # Load a custom font
-    font = ImageFont.truetype("./RubikMonoOne-Regular.ttf", 100)  # Replace with the path to your font file
+    try:
+        font = ImageFont.truetype("./RubikMonoOne-Regular.ttf", 100)  # Replace with the path to your font file
+    except IOError:
+        print("⚠️ Font not found. Using default font.")
+        font = ImageFont.load_default()
 
     # Draw the text on the PIL image
     draw = ImageDraw.Draw(text_frame_pil)
@@ -232,6 +238,8 @@ def run_cheese_listener():
     # Load Vosk (voice detector)
     vosk.SetLogLevel(-1)
     model = vosk.Model(MODEL_PATH)
+    rec = vosk.KaldiRecognizer(model, sample_rate)
+    rec.SetWords(True)
     q = queue.Queue()
 
     def audio_callback(indata, frames, time, status):
@@ -261,7 +269,6 @@ def run_cheese_listener():
 
     with sd.RawInputStream(samplerate=sample_rate, blocksize=BLOCKSIZE, dtype='int16',
                            channels=1, callback=audio_callback, device=real_audio_index):
-        rec = vosk.KaldiRecognizer(model, sample_rate)
         
         while True:
             data = q.get()
@@ -270,59 +277,46 @@ def run_cheese_listener():
 
             if rec.AcceptWaveform(data):
                 result = json.loads(rec.Result())
+                print(result)
                 text = result.get("text", "")
                 print(f"🗣️- Heard: {text}")
                 if matches_trigger(text):
+                # if "result" in result:
+                #     for word in result["result"]:
+                #         if (word["word"] == "cheese" or word["word"] == "she's") and word["conf"] > 0.85:
                     cap.release()
                     stop_stream(stream_proc)
                     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                     filename = os.path.join(PHOTO_DIR, f"cheese_{timestamp}.jpg")
+
+                    if "banana" in text: # Give an extra 3s
+                        show_text("- 1 -")
+                        cv2.waitKey(1111)
+                        show_text("- 2 -")
+                        cv2.waitKey(1111)
+                        show_text("- 3 -")
+                        cv2.waitKey(1111)
+
                     show_text("- READY -")
                     cv2.waitKey(800)
                     show_text("- DON'T MOVE -")
-                    cv2.waitKey(400)
+                    cv2.waitKey(1000)
 
                     capture_thread = threading.Thread(target=capture_photo, args=(filename, frame))
                     capture_thread.start()
 
-                    cv2.waitKey(400)
                     show_text("- ! CHEESE ! -")
                     cv2.waitKey(1)
 
-                    if(not IS_WEBCAM and KEEP_RAW):
-                        cv2.waitKey(2200)
-                        show_text("Wait.  ")
-                        cv2.waitKey(400)
-                        show_text("Wait . ")
-                        cv2.waitKey(400)
-                        show_text("Wait  .")
-                        cv2.waitKey(400)
-                        show_text("Wait.  ")
-                        cv2.waitKey(400)
-                        show_text("Wait . ")
-                        cv2.waitKey(400)
-                        show_text("Wait  .")
-                        cv2.waitKey(400)
-                        show_text("Wait.  ")
-                        cv2.waitKey(400)
-                        show_text("Wait . ")
-                        cv2.waitKey(400)
-                        show_text("Wait  .")
-                        cv2.waitKey(400)
-                        show_text("Wait.  ")
-                        cv2.waitKey(400)
-                        show_text("Wait . ")
-                        cv2.waitKey(400)
-                        show_text("Wait  .")
-                        cv2.waitKey(400)
-                        show_text("Wait.  ")
-                        cv2.waitKey(400)
-                        show_text("Wait . ")
-                        cv2.waitKey(400)
-                        show_text("Wait  .")
-                        cv2.waitKey(400)
-                    show_text("...")
-                    cv2.waitKey(1)
+                    if not IS_WEBCAM and KEEP_RAW:
+                        cv2.waitKey(1000)
+                        for _ in range(6):  # Adjust timing
+                            for dots in ["Wait.  ", "Wait . ", "Wait  ."]:
+                                show_text(dots)
+                                cv2.waitKey(400)
+                        show_text("...")
+                        cv2.waitKey(1)
+
                     capture_thread.join()
 
                     img = cv2.imread(filename)
